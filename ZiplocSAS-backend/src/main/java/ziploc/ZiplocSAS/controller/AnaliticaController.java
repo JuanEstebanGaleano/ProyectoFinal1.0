@@ -1,61 +1,84 @@
 package ziploc.ZiplocSAS.controller;
 
-import ziploc.ZiplocSAS.dto.response.ApiResponse;
-import ziploc.ZiplocSAS.dto.response.ReporteResponse;
-import ziploc.ZiplocSAS.model.*;
-import ziploc.ZiplocSAS.repository.NotificacionRepository;
-import ziploc.ZiplocSAS.service.*;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.*;
+import ziploc.ZiplocSAS.analytics.AnaliticaMovimientos;
+import ziploc.ZiplocSAS.dto.response.*;
+import ziploc.ZiplocSAS.model.*;
+import ziploc.ZiplocSAS.repository.*;
+import ziploc.ZiplocSAS.service.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/analitica")
 @RequiredArgsConstructor
-@Tag(name = "Analítica")
 public class AnaliticaController {
 
+    private final AnaliticaMovimientos analitica;
     private final UsuarioService usuarioService;
     private final BilleteraService billeteraService;
     private final TransaccionService txService;
-    private final NotificacionRepository notifRepo;
+    private final TransaccionRepository txRepo;
 
-    @GetMapping("/reporte-general")
-    @Operation(summary = "Reporte general del sistema")
-    public ResponseEntity<ApiResponse<ReporteResponse>> reporteGeneral() {
-        List<Billetera> billeteras = billeteraService.listarTodasOrdenadas();
-        List<Transaccion> txs = txService.obtenerPorValorDesc();
-        List<Object[]> freq = txService.frecuenciaPorTipo();
+    // ── 1. Reporte general completo ───────────────────────────────────────────
+    @GetMapping("/reporte")
+    public ResponseEntity<ApiResponse<ReporteGeneralResponse>> reporte() {
+        Usuario ma   = analitica.usuarioMasActivo();
+        Billetera mb = analitica.billeteraConMayorUso();
+        LocalDateTime hace24h = LocalDateTime.now().minusHours(24);
 
-        Map<String, Integer> freqMap = new LinkedHashMap<>();
-        for (Object[] row : freq) freqMap.put(row[0].toString(), ((Long) row[1]).intValue());
+        ReporteGeneralResponse reporte = ReporteGeneralResponse.builder()
+                .totalUsuarios(usuarioService.total())
+                .totalBilleteras(billeteraService.total())
+                .totalTransacciones(txRepo.count())
+                .usuarioMasActivoNombre(ma != null ? ma.getNombre() : "N/A")
+                .billeteraTopNombre(mb != null ? mb.getNombre() : "N/A")
+                .billeteraTopTxs(mb != null ? mb.getTotalTransacciones() : 0)
+                .frecuenciaPorTipo(analitica.frecuenciaPorTipo())
+                .actividadPorCategoria(analitica.actividadPorCategoria())
+                .usuariosPorPuntos(usuarioService.listarOrdenadosPorPuntos()
+                        .stream().map(UsuarioResponse::from).toList())
+                .montoUltimas24h(analitica.montoTotalEnRango(hace24h, LocalDateTime.now()))
+                .transaccionesSospechosas(txService.listarSospechosas().size())
+                .build();
 
-        List<Usuario> ranking = usuarioService.listarOrdenadosPorPuntos();
-        String topUsuario = ranking.isEmpty() ? "N/A" : ranking.get(0).getNombre() + " (" + ranking.get(0).getPuntosTotales() + " pts)";
-        String topBilletera = billeteras.isEmpty() ? "N/A" : billeteras.get(0).getNombre() + " (" + billeteras.get(0).getTotalTransacciones() + " txs)";
-
-        return ResponseEntity.ok(ApiResponse.ok("Reporte", ReporteResponse.builder()
-                .totalUsuarios((int) usuarioService.total())
-                .totalBilleteras((int) billeteraService.total())
-                .totalTransacciones((int) txService.total())
-                .montoTotalMovilizado(txs.stream().mapToDouble(Transaccion::getValor).sum())
-                .usuarioMasActivo(topUsuario)
-                .billeteraConMayorUso(topBilletera)
-                .frecuenciaPorTipo(freqMap)
-                .grafoCiclico(txService.getGrafo().tieneCiclo())
-                .build()));
+        return ResponseEntity.ok(ApiResponse.ok("Reporte generado correctamente", reporte));
     }
 
-    @GetMapping("/notificaciones/{uid}")
-    public ResponseEntity<ApiResponse<List<Notificacion>>> notificaciones(@PathVariable String uid) {
-        return ResponseEntity.ok(ApiResponse.ok("Notifs", notifRepo.findByUsuarioIdOrderByFechaDesc(uid)));
+    // ── 2. Usuarios nivel alto (ORO / PLATINO) ────────────────────────────────
+    @GetMapping("/usuarios-nivel-alto")
+    public ResponseEntity<ApiResponse<List<UsuarioResponse>>> nivelAlto() {
+        List<UsuarioResponse> lista = analitica.usuariosNivelAlto()
+                .stream().map(UsuarioResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.ok("Usuarios nivel ORO y PLATINO", lista));
     }
 
-    @GetMapping("/notificaciones/{uid}/no-leidas")
-    public ResponseEntity<ApiResponse<Long>> noLeidas(@PathVariable String uid) {
-        return ResponseEntity.ok(ApiResponse.ok("No leídas", notifRepo.countByUsuarioIdAndLeidaFalse(uid)));
+    // ── 3. Monto total en rango de fechas ─────────────────────────────────────
+    @GetMapping("/monto-rango")
+    public ResponseEntity<ApiResponse<Double>> montoEnRango(
+            @RequestParam String desde,
+            @RequestParam String hasta) {
+        LocalDateTime d = LocalDateTime.parse(desde);
+        LocalDateTime h = LocalDateTime.parse(hasta);
+        double total = analitica.montoTotalEnRango(d, h);
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Monto total entre " + desde + " y " + hasta, total));
+    }
+
+    // ── 4. Grafo de transferencias ────────────────────────────────────────────
+    @GetMapping("/grafo")
+    public ResponseEntity<ApiResponse<GrafoResponse>> grafo() {
+        return ResponseEntity.ok(ApiResponse.ok("Grafo de transferencias", txService.obtenerGrafo()));
+    }
+
+    // ── 5. Transacciones sospechosas ──────────────────────────────────────────
+    @GetMapping("/sospechosas")
+    public ResponseEntity<ApiResponse<List<TransaccionResponse>>> sospechosas() {
+        List<TransaccionResponse> lista = txService.listarSospechosas()
+                .stream().map(TransaccionResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.ok("Transacciones sospechosas", lista));
     }
 }

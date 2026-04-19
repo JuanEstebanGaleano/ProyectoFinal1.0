@@ -1,50 +1,68 @@
 package ziploc.ZiplocSAS.controller;
 
-import ziploc.ZiplocSAS.dto.request.OperacionProgramadaRequest;
-import ziploc.ZiplocSAS.dto.response.ApiResponse;
-import ziploc.ZiplocSAS.model.OperacionProgramada;
-import ziploc.ZiplocSAS.service.OperacionProgramadaService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import ziploc.ZiplocSAS.dto.request.OperacionProgramadaRequest;
+import ziploc.ZiplocSAS.dto.response.*;
+import ziploc.ZiplocSAS.model.OperacionProgramada;
+import ziploc.ZiplocSAS.service.OperacionProgramadaService;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/operaciones-programadas")
 @RequiredArgsConstructor
-@Tag(name = "Operaciones Programadas")
 public class OperacionProgramadaController {
 
     private final OperacionProgramadaService opService;
 
+    // ── 1. Programar operación ────────────────────────────────────────────────
     @PostMapping
-    @Operation(summary = "Programar operación (ColaPrioridad)")
-    public ResponseEntity<ApiResponse<OperacionProgramada>> programar(
-            @RequestBody OperacionProgramadaRequest req) {
-        try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Programada",
-                    opService.programar(req.getUsuarioId(), req.getBilleteraOrigenId(),
-                            req.getBilleteraDestinoId(), req.getTipo(), req.getMonto(),
-                            req.getFechaEjecucion(), req.getDescripcion())));
-        } catch (Exception e) { return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage())); }
+    public ResponseEntity<ApiResponse<OperacionProgramadaResponse>> programar(
+            @Valid @RequestBody OperacionProgramadaRequest req) {
+        OperacionProgramada op = opService.programar(
+                req.getUsuarioId(),
+                req.getBilleteraOrigenId(),
+                req.getBilleteraDestinoId(),
+                req.getTipo(),
+                req.getMonto(),
+                req.getFechaEjecucion(),
+                req.getDescripcion());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Operación programada exitosamente",
+                        OperacionProgramadaResponse.from(op)));
     }
 
-    @PostMapping("/ejecutar")
-    @Operation(summary = "Ejecutar pendientes manualmente")
-    public ResponseEntity<ApiResponse<Integer>> ejecutar() {
-        int n = opService.ejecutarManual();
-        return ResponseEntity.ok(ApiResponse.ok("Ejecutadas: " + n, n));
+    // ── 2. Ejecutar operaciones pendientes ────────────────────────────────────
+    @PostMapping("/ejecutar-pendientes")
+    public ResponseEntity<ApiResponse<Integer>> ejecutarPendientes() {
+        int ejecutadas = opService.ejecutarOperacionesPendientes();
+        return ResponseEntity.ok(ApiResponse.ok(
+                ejecutadas + " operación(es) ejecutada(s)", ejecutadas));
     }
 
-    @GetMapping("/usuario/{uid}")
-    public ResponseEntity<ApiResponse<List<OperacionProgramada>>> porUsuario(@PathVariable String uid) {
-        return ResponseEntity.ok(ApiResponse.ok("Operaciones", opService.listarPorUsuario(uid)));
+    // ── 3. Listar por usuario ─────────────────────────────────────────────────
+    @GetMapping("/usuario/{usuarioId}")
+    public ResponseEntity<ApiResponse<List<OperacionProgramadaResponse>>> listarPorUsuario(
+            @PathVariable String usuarioId) {
+        List<OperacionProgramadaResponse> lista = opService.listarPorUsuario(usuarioId)
+                .stream().map(OperacionProgramadaResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.ok("Operaciones de " + usuarioId, lista));
     }
 
+    // ── 4. Listar todas las pendientes ────────────────────────────────────────
     @GetMapping("/pendientes")
-    public ResponseEntity<ApiResponse<List<OperacionProgramada>>> pendientes() {
-        return ResponseEntity.ok(ApiResponse.ok("Pendientes", opService.listarPendientes()));
+    public ResponseEntity<ApiResponse<List<OperacionProgramadaResponse>>> pendientes() {
+        List<OperacionProgramadaResponse> lista = opService.listarPendientes()
+                .stream().map(OperacionProgramadaResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.ok("Operaciones pendientes", lista));
+    }
+
+    // ── 5. Total pendientes ───────────────────────────────────────────────────
+    @GetMapping("/pendientes/total")
+    public ResponseEntity<ApiResponse<Integer>> totalPendientes() {
+        int total = opService.totalPendientes();
+        return ResponseEntity.ok(ApiResponse.ok("Total pendientes: " + total, total));
     }
 }

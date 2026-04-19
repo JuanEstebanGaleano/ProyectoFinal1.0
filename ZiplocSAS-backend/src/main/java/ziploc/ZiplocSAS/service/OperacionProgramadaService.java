@@ -4,9 +4,9 @@ import ziploc.ZiplocSAS.model.*;
 import ziploc.ZiplocSAS.repository.OperacionProgramadaRepository;
 import ziploc.ZiplocSAS.structures.ColaPrioridad;
 import lombok.RequiredArgsConstructor;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,55 +16,82 @@ public class OperacionProgramadaService {
 
     private final OperacionProgramadaRepository opRepo;
     private final TransaccionService txService;
-    private final UsuarioService usuarioService;
 
-    // Cola de prioridad (Min-Heap) para ordenar por fecha de ejecución
+    // Cola de prioridad en memoria (min-heap por fecha)
     private final ColaPrioridad<OperacionProgramada> cola = new ColaPrioridad<>();
 
+    // ─── PROGRAMAR ────────────────────────────────────────────────────────────
     @Transactional
-    public OperacionProgramada programar(String uid, String bO, String bD,
+    public OperacionProgramada programar(String usuarioId, String bOrigen, String bDestino,
                                          TipoTransaccion tipo, double monto,
-                                         LocalDateTime fecha, String desc) {
-        OperacionProgramada op = new OperacionProgramada(uid, bO, bD, tipo, monto, fecha, desc);
+                                         LocalDateTime fecha, String descripcion) {
+        OperacionProgramada op = new OperacionProgramada(
+                usuarioId, bOrigen, bDestino, tipo, monto, fecha, descripcion);
         opRepo.save(op);
         cola.insertar(op);
-        usuarioService.notificar(uid, "📅 Programada: " + desc + " para " + fecha.toString().substring(0, 10));
         return op;
     }
 
-    /** Se ejecuta automáticamente cada 60 segundos */
-    @Scheduled(fixedDelay = 60_000)
+    // ─── EJECUTAR PENDIENTES ──────────────────────────────────────────────────
     @Transactional
-    public int ejecutarPendientes() {
+    public int ejecutarOperacionesPendientes() {
+        // Cargar desde BD las que aún no se han ejecutado y ya vencieron
         List<OperacionProgramada> pendientes = opRepo.findPendientesAEjecutar(LocalDateTime.now());
-        int count = 0;
+        int ejecutadas = 0;
+
         for (OperacionProgramada op : pendientes) {
             try {
                 ejecutar(op);
                 op.marcarEjecutada();
                 opRepo.save(op);
-                usuarioService.notificar(op.getUsuarioId(), "✅ Ejecutada: " + op.getDescripcion());
-                count++;
+                ejecutadas++;
             } catch (Exception e) {
-                usuarioService.notificar(op.getUsuarioId(), "❌ Falló: " + op.getDescripcion());
+                System.err.println("⚠️ Error ejecutando operación [" + op.getId() + "]: " + e.getMessage());
             }
         }
-        return count;
+
+        // Limpiar cola en memoria sincronizando con BD
+        sincronizarCola();
+
+        return ejecutadas;
     }
 
-    /** Fuerza ejecución manual */
-    @Transactional
-    public int ejecutarManual() { return ejecutarPendientes(); }
+    // ─── LISTAR POR USUARIO ───────────────────────────────────────────────────
+    public List<OperacionProgramada> listarPorUsuario(String usuarioId) {
+        return opRepo.findByUsuarioId(usuarioId);
+    }
 
+    // ─── LISTAR PENDIENTES ────────────────────────────────────────────────────
+    public List<OperacionProgramada> listarPendientes() {
+        return opRepo.findByEjecutadaFalse();
+    }
+
+    // ─── TOTAL PENDIENTES ─────────────────────────────────────────────────────
+    public int totalPendientes() {
+        return opRepo.findByEjecutadaFalse().size();
+    }
+
+    // ─── Auxiliar: ejecutar una operación ────────────────────────────────────
     private void ejecutar(OperacionProgramada op) {
         switch (op.getTipo()) {
-            case RECARGA -> txService.recargar(op.getUsuarioId(), op.getBilleteraDestinoId(), op.getMonto());
-            case RETIRO  -> txService.retirar(op.getUsuarioId(), op.getBilleteraOrigenId(), op.getMonto());
-            default      -> txService.transferir(op.getUsuarioId(), op.getBilleteraOrigenId(), op.getBilleteraDestinoId(), op.getMonto());
+            case RECARGA ->
+                    txService.recargar(op.getUsuarioId(), op.getBilleteraDestinoId(), op.getMonto());
+            case RETIRO ->
+                    txService.retirar(op.getUsuarioId(), op.getBilleteraOrigenId(), op.getMonto());
+            case TRANSFERENCIA_ENVIADA, PAGO_PROGRAMADO ->
+                    txService.transferir(op.getUsuarioId(),
+                            op.getBilleteraOrigenId(),
+                            op.getBilleteraDestinoId(),
+                            op.getMonto());
+            default ->
+                    throw new IllegalArgumentException("Tipo no ejecutable automáticamente: " + op.getTipo());
         }
     }
 
-    public List<OperacionProgramada> listarPorUsuario(String uid) { return opRepo.findByUsuarioId(uid); }
-    public List<OperacionProgramada> listarPendientes() { return opRepo.findByEjecutadaFalse(); }
-    public int totalEnCola() { return cola.size(); }
+    // ─── Auxiliar: sincronizar cola en memoria con BD ─────────────────────────
+    private void sincronizarCola() {
+        // Vaciar cola y recargar solo pendientes no ejecutados
+        while (!cola.isEmpty()) cola.extraer();
+        opRepo.findByEjecutadaFalse().forEach(cola::insertar);
+    }
 }

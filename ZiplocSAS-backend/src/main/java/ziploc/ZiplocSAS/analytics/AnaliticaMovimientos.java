@@ -1,80 +1,98 @@
 package ziploc.ZiplocSAS.analytics;
 
-
 import ziploc.ZiplocSAS.model.*;
-import ziploc.ZiplocSAS.service.GestorUsuarios;
+import ziploc.ZiplocSAS.repository.*;
+import ziploc.ZiplocSAS.service.UsuarioService;
+import ziploc.ZiplocSAS.service.BilleteraService;
+import ziploc.ZiplocSAS.service.TransaccionService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
+@Component
+@RequiredArgsConstructor
 public class AnaliticaMovimientos {
 
-    private final GestorUsuarios gu;
+    private final UsuarioService usuarioService;
+    private final BilleteraService billeteraService;
+    private final TransaccionService txService;
+    private final TransaccionRepository txRepo;
+    private final BilleteraRepository billeteraRepo;
 
-    public AnaliticaMovimientos(GestorUsuarios gu) { this.gu = gu; }
-
+    /** Usuario con más transacciones en todas sus billeteras */
     public Usuario usuarioMasActivo() {
-        Usuario mejor = null; int max = 0;
-        for (Usuario u : gu.getTodosUsuarios()) {
-            int t = 0;
-            for (Billetera b : u.getBilleteras()) t += b.getTotalTransacciones();
-            if (t > max) { max = t; mejor = u; }
-        }
-        return mejor;
+        return usuarioService.listarTodos().stream()
+                .max(Comparator.comparingInt(u ->
+                        billeteraRepo.findByUsuarioId(u.getId()).stream()
+                                .mapToInt(Billetera::getTotalTransacciones).sum()))
+                .orElse(null);
     }
 
+    /** Billetera con más transacciones registradas */
     public Billetera billeteraConMayorUso() {
-        Billetera mejor = null; int max = 0;
-        for (Usuario u : gu.getTodosUsuarios())
-            for (Billetera b : u.getBilleteras())
-                if (b.getTotalTransacciones() > max) { max = b.getTotalTransacciones(); mejor = b; }
-        return mejor;
+        return billeteraService.listarTodasOrdenadas().stream()
+                .findFirst().orElse(null);
     }
 
+    /** Suma de montos de transacciones COMPLETADAS en un rango de fechas */
     public double montoTotalEnRango(LocalDateTime desde, LocalDateTime hasta) {
-        double total = 0;
-        for (Usuario u : gu.getTodosUsuarios())
-            for (Billetera b : u.getBilleteras())
-                for (Transaccion t : b.getHistorialTransacciones())
-                    if (!t.getFecha().isBefore(desde) && !t.getFecha().isAfter(hasta)
-                            && t.getEstado() == EstadoTransaccion.COMPLETADA) total += t.getValor();
-        return total;
+        Double result = txRepo.sumMontoEnRango(desde, hasta);
+        return result != null ? result : 0.0;
     }
 
+    /** Frecuencia de cada tipo de transacción */
     public Map<TipoTransaccion, Integer> frecuenciaPorTipo() {
-        Map<TipoTransaccion, Integer> m = new EnumMap<>(TipoTransaccion.class);
-        for (TipoTransaccion t : TipoTransaccion.values()) m.put(t, 0);
-        for (Usuario u : gu.getTodosUsuarios())
-            for (Billetera b : u.getBilleteras())
-                for (Transaccion t : b.getHistorialTransacciones()) m.merge(t.getTipo(), 1, Integer::sum);
-        return m;
+        Map<TipoTransaccion, Integer> mapa = new EnumMap<>(TipoTransaccion.class);
+        for (TipoTransaccion t : TipoTransaccion.values()) mapa.put(t, 0);
+        txRepo.countByTipo().forEach(row ->
+                mapa.put((TipoTransaccion) row[0], ((Long) row[1]).intValue()));
+        return mapa;
     }
 
+    /** Total de transacciones agrupadas por tipo de billetera */
     public Map<TipoBilletera, Integer> actividadPorCategoria() {
-        Map<TipoBilletera, Integer> m = new EnumMap<>(TipoBilletera.class);
-        for (TipoBilletera t : TipoBilletera.values()) m.put(t, 0);
-        for (Usuario u : gu.getTodosUsuarios())
-            for (Billetera b : u.getBilleteras()) m.merge(b.getTipo(), b.getTotalTransacciones(), Integer::sum);
-        return m;
+        Map<TipoBilletera, Integer> mapa = new EnumMap<>(TipoBilletera.class);
+        for (TipoBilletera t : TipoBilletera.values()) mapa.put(t, 0);
+        billeteraRepo.findAll().forEach(b ->
+                mapa.merge(b.getTipo(), b.getTotalTransacciones(), Integer::sum));
+        return mapa;
     }
 
-    public List<Usuario> usuariosNivelAlto() { return gu.buscarUsuariosPorRangoPuntos(1001, Integer.MAX_VALUE); }
+    /** Usuarios con nivel ORO o PLATINO (puntos > 1000) */
+    public List<Usuario> usuariosNivelAlto() {
+        return usuarioService.buscarPorRangoPuntos(1001, Integer.MAX_VALUE);
+    }
 
+    /** Imprime un reporte en consola (útil para logs/debug) */
     public void imprimirReporteGeneral() {
         System.out.println("\n" + "=".repeat(55));
         System.out.println("         📊 REPORTE GENERAL DEL SISTEMA");
         System.out.println("=".repeat(55));
-        System.out.println("👥 Total usuarios: " + gu.totalUsuarios());
+        System.out.println("👥 Total usuarios: " + usuarioService.total());
+
         Usuario ma = usuarioMasActivo();
         if (ma != null) System.out.println("🏆 Más activo: " + ma.getNombre());
+
         Billetera mb = billeteraConMayorUso();
-        if (mb != null) System.out.println("💼 Billetera top: " + mb.getNombre() + " (" + mb.getTotalTransacciones() + " txs)");
+        if (mb != null) System.out.printf("💼 Billetera top: %s (%d txs)%n",
+                mb.getNombre(), mb.getTotalTransacciones());
+
         System.out.println("\n📈 Frecuencia por tipo:");
-        frecuenciaPorTipo().forEach((k, v) -> System.out.printf("   %-30s: %d%n", k, v));
+        frecuenciaPorTipo().forEach((k, v) ->
+                System.out.printf("   %-30s: %d%n", k, v));
+
         System.out.println("\n📂 Actividad por categoría:");
-        actividadPorCategoria().forEach((k, v) -> System.out.printf("   %-20s: %d txs%n", k, v));
+        actividadPorCategoria().forEach((k, v) ->
+                System.out.printf("   %-20s: %d txs%n", k, v));
+
         System.out.println("\n🏅 Usuarios por puntos (BST inorden):");
-        gu.obtenerUsuariosOrdenadosPorPuntos().forEach(u ->
-                System.out.printf("   %s | %d pts | %s%n", u.getNombre(), u.getPuntosTotales(), u.getNivel()));
+        usuarioService.listarOrdenadosPorPuntos().forEach(u ->
+                System.out.printf("   %s | %d pts | %s%n",
+                        u.getNombre(), u.getPuntosTotales(), u.getNivel()));
+
         System.out.println("=".repeat(55));
     }
 }
