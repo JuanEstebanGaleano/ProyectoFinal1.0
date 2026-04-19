@@ -84,4 +84,16 @@ public class ListaEnlazada<T> implements Iterable<T> {
             }
         };
     }
+    @Override
+    public String toString() {
+        if (isEmpty()) return "[]";
+        StringBuilder sb = new StringBuilder("[");
+        Nodo<T> actual = cabeza;
+        while (actual != null) {
+            sb.append(actual.dato);
+            if (actual.siguiente != null) sb.append(", ");
+            actual = actual.siguiente;
+        }
+        return sb.append("]").toString();
+    }
 }

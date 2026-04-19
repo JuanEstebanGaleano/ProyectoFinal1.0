@@ -1,11 +1,14 @@
 package ziploc.ZiplocSAS.model;
+
 import jakarta.persistence.*;
 import lombok.*;
+import ziploc.ZiplocSAS.structures.ListaEnlazada;
 import java.util.UUID;
 
 @Entity @Table(name = "billeteras")
-@Data @NoArgsConstructor
+@Getter @Setter @NoArgsConstructor  // ← Reemplaza @Data por @Getter @Setter
 public class Billetera {
+
     @Id
     private String id = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
@@ -23,11 +26,12 @@ public class Billetera {
 
     private int totalTransacciones = 0;
 
+    @Transient
+    private ListaEnlazada<Transaccion> historialTransacciones = new ListaEnlazada<>();
+
     public Billetera(String nombre, TipoBilletera tipo, double saldoInicial, String usuarioId) {
-        this.nombre = nombre;
-        this.tipo = tipo;
-        this.saldo = saldoInicial;
-        this.usuarioId = usuarioId;
+        this.nombre = nombre; this.tipo = tipo;
+        this.saldo = saldoInicial; this.usuarioId = usuarioId;
     }
 
     public boolean recargar(double m) {
@@ -40,5 +44,25 @@ public class Billetera {
         saldo -= m; return true;
     }
 
+    public void agregarTransaccion(Transaccion t) {
+        if (historialTransacciones == null) historialTransacciones = new ListaEnlazada<>();
+        historialTransacciones.agregar(t);
+        totalTransacciones++;
+    }
+
+    public ListaEnlazada<Transaccion> getHistorialTransacciones() {
+        if (historialTransacciones == null) historialTransacciones = new ListaEnlazada<>();
+        return historialTransacciones;
+    }
+
     public void registrarTransaccion() { totalTransacciones++; }
+
+    // ── toString() LIMPIO ────────────────────────────────────────────────────
+    @Override
+    public String toString() {
+        return String.format(
+                "Billetera[%s] %-20s | %-15s | Saldo: $%10.2f | Activa: %-5s | Txs: %d",
+                id, nombre, tipo, saldo, activa ? "SÍ" : "NO", totalTransacciones
+        );
+    }
 }

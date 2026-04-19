@@ -8,6 +8,7 @@ import java.util.UUID;
 @Entity @Table(name = "transacciones")
 @Data @NoArgsConstructor
 public class Transaccion implements Comparable<Transaccion> {
+
     @Id
     private String id = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
@@ -31,6 +32,7 @@ public class Transaccion implements Comparable<Transaccion> {
 
     private boolean sospechosa = false;
 
+    // ── Constructor Spring Boot (5 parámetros) ────────────────────────────────
     public Transaccion(TipoTransaccion tipo, double valor,
                        String bOrigen, String bDestino, String usuarioId) {
         this.tipo = tipo;
@@ -41,7 +43,14 @@ public class Transaccion implements Comparable<Transaccion> {
         this.puntosGenerados = calcularPuntos();
     }
 
+    // ── Constructor consola (4 parámetros, sin usuarioId) ────────────────────
+    public Transaccion(TipoTransaccion tipo, double valor,
+                       String bOrigen, String bDestino) {
+        this(tipo, valor, bOrigen, bDestino, null);
+    }
+
     private int calcularPuntos() {
+        if (tipo == null) return 0;
         return switch (tipo) {
             case RECARGA                -> (int)(valor / 100);
             case RETIRO                 -> (int)(valor / 100) * 2;
@@ -58,5 +67,7 @@ public class Transaccion implements Comparable<Transaccion> {
     }
 
     @Override
-    public int compareTo(Transaccion o) { return this.fecha.compareTo(o.fecha); }
+    public int compareTo(Transaccion o) {
+        return this.fecha.compareTo(o.fecha);
+    }
 }

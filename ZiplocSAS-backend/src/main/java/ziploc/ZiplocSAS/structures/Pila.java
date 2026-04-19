@@ -31,4 +31,17 @@ public class Pila<T> {
 
     public boolean isEmpty() { return tope == null; }
     public int size() { return tamanio; }
+
+    @Override
+    public String toString() {
+        if (isEmpty()) return "Pila[]";
+        StringBuilder sb = new StringBuilder("Pila[tope→");
+        Nodo<T> actual = tope;
+        while (actual != null) {
+            sb.append(actual.dato);
+            if (actual.siguiente != null) sb.append(", ");
+            actual = actual.siguiente;
+        }
+        return sb.append("]").toString();
+    }
 }
