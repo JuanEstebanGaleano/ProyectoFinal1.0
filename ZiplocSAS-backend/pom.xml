@@ -78,7 +78,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>ziplocsas/ziplocsas.ZiplocsasApp</mainClass>
+                    <mainClass>ziplocsas.ZiplocApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>

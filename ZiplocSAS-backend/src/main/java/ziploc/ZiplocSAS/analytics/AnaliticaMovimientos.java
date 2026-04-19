@@ -1,44 +1,40 @@
 package ziploc.ZiplocSAS.analytics;
 
+import org.springframework.stereotype.Service;
 import ziploc.ZiplocSAS.model.*;
 import ziploc.ZiplocSAS.service.GestorUsuarios;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
+@Service   // ← ESTA línea faltaba; ahora Spring la detecta e inyecta
 public class AnaliticaMovimientos {
 
     private final GestorUsuarios gu;
 
-    // ── Constructor para módulo de CONSOLA ───────────────────────────────────
+    // Spring inyecta GestorUsuarios automáticamente por constructor
     public AnaliticaMovimientos(GestorUsuarios gu) {
         this.gu = gu;
     }
 
-    // ── Usuario con más transacciones ────────────────────────────────────────
     public Usuario usuarioMasActivo() {
-        Usuario mejor = null;
-        int max = 0;
+        Usuario mejor = null; int max = 0;
         for (Usuario u : gu.getTodosUsuarios()) {
             int t = 0;
-            for (Billetera b : u.getBilleteras())
-                t += b.getTotalTransacciones();
+            for (Billetera b : u.getBilleteras()) t += b.getTotalTransacciones();
             if (t > max) { max = t; mejor = u; }
         }
         return mejor;
     }
 
-    // ── Billetera con más transacciones ──────────────────────────────────────
     public Billetera billeteraConMayorUso() {
-        Billetera mejor = null;
-        int max = 0;
+        Billetera mejor = null; int max = 0;
         for (Usuario u : gu.getTodosUsuarios())
             for (Billetera b : u.getBilleteras())
                 if (b.getTotalTransacciones() > max) { max = b.getTotalTransacciones(); mejor = b; }
         return mejor;
     }
 
-    // ── Monto total de transacciones COMPLETADAS en rango de fechas ───────────
     public double montoTotalEnRango(LocalDateTime desde, LocalDateTime hasta) {
         double total = 0;
         for (Usuario u : gu.getTodosUsuarios())
@@ -50,7 +46,6 @@ public class AnaliticaMovimientos {
         return total;
     }
 
-    // ── Frecuencia por tipo de transacción ───────────────────────────────────
     public Map<TipoTransaccion, Integer> frecuenciaPorTipo() {
         Map<TipoTransaccion, Integer> m = new EnumMap<>(TipoTransaccion.class);
         for (TipoTransaccion t : TipoTransaccion.values()) m.put(t, 0);
@@ -61,7 +56,6 @@ public class AnaliticaMovimientos {
         return m;
     }
 
-    // ── Actividad por categoría de billetera ─────────────────────────────────
     public Map<TipoBilletera, Integer> actividadPorCategoria() {
         Map<TipoBilletera, Integer> m = new EnumMap<>(TipoBilletera.class);
         for (TipoBilletera t : TipoBilletera.values()) m.put(t, 0);
@@ -71,12 +65,10 @@ public class AnaliticaMovimientos {
         return m;
     }
 
-    // ── Usuarios nivel ORO o PLATINO (puntos > 1000) ─────────────────────────
     public List<Usuario> usuariosNivelAlto() {
         return gu.buscarUsuariosPorRangoPuntos(1001, Integer.MAX_VALUE);
     }
 
-    // ── Transacciones sospechosas de todos los usuarios ───────────────────────
     public List<Transaccion> listarSospechosas() {
         List<Transaccion> resultado = new ArrayList<>();
         for (Usuario u : gu.getTodosUsuarios())
@@ -85,7 +77,6 @@ public class AnaliticaMovimientos {
         return resultado;
     }
 
-    // ── Reporte general en consola ────────────────────────────────────────────
     public void imprimirReporteGeneral() {
         System.out.println("\n" + "=".repeat(55));
         System.out.println("         📊 REPORTE GENERAL DEL SISTEMA");
@@ -115,7 +106,7 @@ public class AnaliticaMovimientos {
         System.out.println("\n⚠️  Transacciones sospechosas: " + listarSospechosas().size());
 
         double montoHoy = montoTotalEnRango(
-                LocalDateTime.now().withHour(0).withMinute(0),
+                LocalDateTime.now().withHour(0).withMinute(0).withSecond(0),
                 LocalDateTime.now());
         System.out.printf("\n💰 Monto movido hoy: $%.2f%n", montoHoy);
 

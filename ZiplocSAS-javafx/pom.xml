@@ -75,8 +75,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>ziplocsas/ziplocsas.ZiplocsasApp</mainClass>
-                </configuration>
+                    <mainClass>ziploc.ZiplocApp</mainClass>                </configuration>
             </plugin>
 
         </plugins>

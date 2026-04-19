@@ -1,10 +1,12 @@
 package ziploc.ZiplocSAS.service;
 
+import org.springframework.stereotype.Service;
 import ziploc.ZiplocSAS.model.*;
 import ziploc.ZiplocSAS.structures.*;
 
 import java.util.List;
 
+@Service   // ← Spring la registra como bean singleton
 public class GestorUsuarios {
 
     private final TablaHash<String, Usuario> porId     = new TablaHash<>();
@@ -25,8 +27,8 @@ public class GestorUsuarios {
     }
 
     // ── Buscar ────────────────────────────────────────────────────────────────
-    public Usuario buscarPorId(String id)       { return porId.get(id); }
-    public Usuario buscarPorCedula(String c)    { return porCedula.get(c); }
+    public Usuario buscarPorId(String id)    { return porId.get(id); }
+    public Usuario buscarPorCedula(String c) { return porCedula.get(c); }
 
     // ── Actualizar ────────────────────────────────────────────────────────────
     public boolean actualizarUsuario(String id, String nombre, String email) {
