@@ -1,0 +1,5 @@
+package ziploc.ZiplocSAS.model;
+
+public enum TipoTransaccion {
+    RECARGA, RETIRO, TRANSFERENCIA_ENVIADA, TRANSFERENCIA_RECIBIDA, PAGO_PROGRAMADO, REVERSION
+}
