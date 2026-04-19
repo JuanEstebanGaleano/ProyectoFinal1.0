@@ -72,13 +72,12 @@
 
     <build>
         <plugins>
-
-            <!-- Spring Boot -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>ziplocsas.ZiplocApplication</mainClass>
+                    <!-- ✅ Apunta al paquete y clase correctos -->
+                    <mainClass>ziploc.ZiplocSAS.ZiplocApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>

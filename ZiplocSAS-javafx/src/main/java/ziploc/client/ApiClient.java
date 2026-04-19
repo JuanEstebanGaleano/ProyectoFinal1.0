@@ -1,4 +1,4 @@
-package ziploc.ui.client;
+package ziploc.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
